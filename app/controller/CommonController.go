@@ -1,13 +1,16 @@
 package controller
 
 import (
+	"lucky/app/common"
 	"lucky/app/model"
 )
 
 func GetUserIdFromDB(student_number string) int {
 	userModel := model.User{}
 	res := userModel.GetUserByStudentNumber(student_number)
-
+	if res.Status == common.CodeError {
+		return common.CodeError
+	}
 	userID := res.Data.(model.User).ID
 
 	return userID

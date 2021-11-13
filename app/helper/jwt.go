@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"lucky/app/common"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
@@ -18,8 +19,8 @@ func CreatToken(student_number string) string {
 	claim := JwtClaim{}
 
 	claim.Student_number = student_number
-	claim.ExpiresAt = time.Now().Add(168 * time.Hour).Unix()
-	claim.IssuedAt = time.Now().Unix()
+	claim.ExpiresAt = time.Now().In(common.ChinaTime).Add(168 * time.Hour).Unix()
+	claim.IssuedAt = time.Now().In(common.ChinaTime).Unix()
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claim)
 	signedToken, err := token.SignedString([]byte("Matilda"))

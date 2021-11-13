@@ -7,6 +7,7 @@ import (
 	"lucky/app/helper"
 	"lucky/app/model"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -42,6 +43,7 @@ func AddDesire(c *gin.Context) {
 		return
 	}
 
+	desireJson.CreatAt = time.Now().In(common.ChinaTime)
 	res := desireModel.AddDesire(desireJson)
 	if res.Status == common.CodeError {
 		c.JSON(http.StatusOK, helper.ApiReturn(res.Status, res.Msg, res.Data))
@@ -56,15 +58,17 @@ func AddDesire(c *gin.Context) {
 // 点亮愿望
 func LightDesire(c *gin.Context) {
 	var desireJson model.Desire
+	var lightDesireJson model.LightInfo
 	desireModel := model.Desire{}
 	desireValidate := validate.DesireValidate
+	lightDesireModel := model.LightInfo{}
 
-	if err := c.ShouldBindJSON(&desireJson); err != nil {
+	if err := c.ShouldBindJSON(&lightDesireJson); err != nil {
 		c.JSON(http.StatusOK, helper.ApiReturn(common.CodeError, "数据模型绑定失败", err))
 		return
 	}
 
-	desireMap := helper.Struct2Map(desireJson)
+	desireMap := helper.Struct2Map(lightDesireJson)
 
 	if res, err := desireValidate.ValidateMap(desireMap, "light"); !res {
 		c.JSON(http.StatusOK, helper.ApiReturn(common.CodeError, "数据校验失败", err))
@@ -74,34 +78,57 @@ func LightDesire(c *gin.Context) {
 	desireJson.LightUser = c.MustGet("user_id").(int)
 	userLightCount := desireModel.GetUserLightCount(desireJson)
 
+	// check self desire
+	userDesireModel := model.UserDesire{}
+	var userDesireTemp model.UserDesire
+	userDesireTemp.UserID = desireJson.LightUser
+	userDesireTemp.DesireID = lightDesireJson.DesireID
+	checkCode := userDesireModel.CheckUserDesire2(userDesireTemp)
+	log.Println(checkCode)
+	log.Println(userDesireTemp)
+	if checkCode == common.CodeSuccess {
+		c.JSON(http.StatusOK, helper.ApiReturn(common.CodeError, "不能点亮自己的愿望哦", ""))
+		return
+	}
+
 	if desireModel.GetUserWishBugNotReCount(desireJson) >= 2 {
 		c.JSON(http.StatusOK, helper.ApiReturn(common.CodeError, "已经点亮了两个愿望了", ""))
 		return
 	}
 
 	if userLightCount >= 7 {
-		c.JSON(http.StatusOK, helper.ApiReturn(common.CodeError, "已经点亮了七个愿望了", ""))
+		c.JSON(http.StatusOK, helper.ApiReturn(common.CodeError, "已经点亮过七个愿望了", ""))
 		return
 	}
+
+	desireInfo := desireModel.GetWishByID(lightDesireJson.DesireID).Data.(model.Desire)
+	if desireInfo.State != 0 {
+		c.JSON(http.StatusOK, helper.ApiReturn(common.CodeError, "愿望已经被抢先实现了", ""))
+		return
+	}
+
+	desireJson.ID = lightDesireJson.DesireID
 	var userModel model.User
-	var userDesireModel model.UserDesire
 	desireJson.State = 1
 
 	res := desireModel.LightDesire(desireJson)
-	desireUserID := userDesireModel.GetUserIDbyWishID(desireJson.ID)
-
+	desireUserID := userDesireModel.GetUserIDbyWishID(lightDesireJson.DesireID)
+	res = lightDesireModel.CreateLightInfo(lightDesireJson)
 	userEmail := userModel.GetUserEmailByUserID(desireUserID)
-
-	_, err2 := helper.SendMail(userEmail, common.LightWish, "", "")
-	if err2 != nil {
-		log.Print(err2)
-	}
+	log.Println(userEmail)
+	go func() {
+		mailErr, err2 := helper.SendMail(userEmail, common.LightWish, "", "")
+		log.Println(mailErr)
+		if err2 != nil {
+			log.Print(err2)
+		}
+	}()
 
 	c.JSON(http.StatusOK, helper.ApiReturn(res.Status, res.Msg, res.Data))
 }
 
 // 获取用户的愿望池
-func GetUserDesire(c *gin.Context) {
+func GetUserPostDesire(c *gin.Context) {
 	var userDesireJson model.UserDesire
 	desireModel := model.UserDesire{}
 	userDesireValidate := validate.UserDesireValidate
@@ -126,7 +153,7 @@ func GetUserDesire(c *gin.Context) {
 }
 
 // 获取用户的愿望池
-func GetUserDesire2(c *gin.Context) {
+func GetUserLightDesire(c *gin.Context) {
 	var userDesireJson model.UserDesire
 	desireModel := model.UserDesire{}
 	// userDesireValidate := validate.UserDesireValidate
@@ -215,7 +242,7 @@ func DeleteWish(c *gin.Context) {
 
 	// 定义一个 结构体 用来接 json格式 的愿望Type
 	var desireJson model.Desire
-
+	lightInfoModel := model.LightInfo{}
 	// 初始化一个 验证器 用来校验数据格式
 	desireValidate := validate.DesireValidate
 
@@ -247,28 +274,22 @@ func DeleteWish(c *gin.Context) {
 		return
 	}
 
-	if desireInfo.State == 1 {
+	if desireInfo.State == common.WishHaveLight {
 		userEmail := userModel.GetUserEmailByUserID(desireInfo.LightUser)
-		_, _ = helper.SendMail(userEmail, common.DeleteWish, desireInfo.Desire, "")
+		go func() {
+			mailErr, err2 := helper.SendMail(userEmail, common.DeleteWish, desireInfo.Desire, "")
+			log.Println(mailErr)
+			if err2 != nil {
+				log.Print(err2)
+			}
+		}()
 	}
 	_ = userDesireModel.DeleteUserDesire(userDesireJson)
-	res := desireModel.DeleteWish(desireJson)
+
+	res := lightInfoModel.DeleteLighInfoByDesireID(desireJson.ID)
+	res = desireModel.DeleteWish(desireJson)
 	c.JSON(http.StatusOK, helper.ApiReturn(res.Status, res.Msg, res.Data))
 
-}
-
-// 一次性获取10个愿望
-func Get10Wishes(c *gin.Context) {
-	desireModel := model.Desire{}
-	res := desireModel.Get10Wishes()
-	c.JSON(http.StatusOK, helper.ApiReturn(res.Status, res.Msg, res.Data))
-}
-
-// TODO:返回所有愿望
-func GetAllDesire(c *gin.Context) {
-	desireModel := model.Desire{}
-	res := desireModel.GetAllWishes()
-	c.JSON(http.StatusOK, helper.ApiReturn(res.Status, res.Msg, res.Data))
 }
 
 // 测试返回token
@@ -281,7 +302,7 @@ func Token(c *gin.Context) {
 func CancelLightDesire(c *gin.Context) {
 	desireModel := model.Desire{}
 	desireValidate := validate.DesireValidate
-
+	lightInfoModel := model.LightInfo{}
 	cancelDesireJson := struct {
 		Message string `json:"message"`
 		ID      int    `json:"wish_id"`
@@ -320,11 +341,22 @@ func CancelLightDesire(c *gin.Context) {
 		return
 	}
 
+	if desireInfo.State == common.WishHaveRealize {
+		c.JSON(http.StatusOK, helper.ApiReturn(common.CodeError, "这个愿望已经被确认实现啦", ""))
+		return
+	}
+
 	desireUserID := userDesireModel.GetUserIDbyWishID(desireJson.ID)
 	userEmail := userModel.GetUserEmailByUserID(desireUserID)
-
-	res := desireModel.CancelAchieveDesire(desireJson)
-	_, _ = helper.SendMail(userEmail, common.CancelLight, desireInfo.Desire, cancelDesireJson.Message)
+	res := lightInfoModel.DeleteLighInfoByDesireID(desireJson.ID)
+	res = desireModel.CancelAchieveDesire(desireJson)
+	go func() {
+		mailErr, err2 := helper.SendMail(userEmail, common.CancelLight, desireInfo.Desire, cancelDesireJson.Message)
+		log.Println(mailErr)
+		if err2 != nil {
+			log.Print(err2)
+		}
+	}()
 	c.JSON(http.StatusOK, helper.ApiReturn(res.Status, res.Msg, res.Data))
 
 }
@@ -347,10 +379,25 @@ func AchieveDesire(c *gin.Context) {
 		return
 	}
 
-	desireInfo := desireModel.GetWishByID(desireJson.ID).Data.(model.Desire)
+	res := desireModel.GetWishByID(desireJson.ID)
+	desireInfo := res.Data.(model.Desire)
 	requestUesrID := c.MustGet("user_id").(int)
 
 	var DesireInfo model.Desire
+	var userDesire model.UserDesire
+	userID := userDesire.GetUserIDbyWishID(desireJson.ID)
+
+	if desireInfo.State == 0 {
+		c.JSON(http.StatusNotFound, helper.ApiReturn(common.CodeError, "这个愿望还没被点亮", ""))
+		return
+	}
+
+	if userID == requestUesrID {
+		desireJson.State = 2
+		res := desireModel.AchieveDesire(desireJson)
+		c.JSON(http.StatusOK, helper.ApiReturn(res.Status, res.Msg, res.Data))
+		return
+	}
 
 	DesireInfo.ID = desireInfo.ID
 	DesireInfo.LightUser = requestUesrID
@@ -361,23 +408,39 @@ func AchieveDesire(c *gin.Context) {
 		return
 	}
 
-	if desireInfo.State == 0 {
-		c.JSON(http.StatusNotFound, helper.ApiReturn(common.CodeError, "这个愿望还没被点亮", ""))
-		return
-	}
-
 	var userModel model.User
-	var userDesire model.UserDesire
-	desireJson.State = 2
-	res := desireModel.AchieveDesire(desireJson)
 
 	// 是谁的愿望就给谁发邮件，所以要在user_desire表中找到愿望的的主人的ID，然后再找的他的邮箱
-	userID := userDesire.GetUserIDbyWishID(desireJson.ID)
 	userEmail := userModel.GetUserEmailByUserID(userID)
 
 	userName := userModel.GetUserNameByUserID(desireInfo.LightUser)
 
-	_, _ = helper.SendMail(userEmail, common.HaveAchieve, userName, "")
+	go func() {
+		mailErr, err2 := helper.SendMail(userEmail, common.HaveAchieve, userName, "")
+		log.Println(mailErr)
+		if err2 != nil {
+			log.Print(err2)
+		}
+	}()
+	c.JSON(http.StatusOK, helper.ApiReturn(common.CodeSuccess, "实现愿望成功，我们已经通知该同学啦", ""))
+}
+
+// 获取点亮人的信息
+func GetLigtherInfo(c *gin.Context) {
+	var lighterInfo model.LightInfo
+	// var lighterModel model.LightInfo
+	lighterModel := model.LightInfo{}
+
+	if err := c.ShouldBindQuery(&lighterInfo); err != nil {
+		c.JSON(http.StatusOK, helper.ApiReturn(common.CodeError, "数据模型绑定失败", err.Error()))
+		return
+	}
+
+	res := lighterModel.GetLightInfoByDesireID(lighterInfo)
+	if res.Status == common.CodeError {
+		c.JSON(http.StatusNotFound, helper.ApiReturn(res.Status, res.Msg, res.Data))
+		return
+	}
 
 	c.JSON(http.StatusOK, helper.ApiReturn(res.Status, res.Msg, res.Data))
 }

@@ -13,11 +13,13 @@ func init() {
 		"wishman_tel":    "required",
 		"wishman_qq":     "required",
 		"message":        "required",
+		"desire_id":      "required",
+		"light_name":     "required",
 	}
 
 	scenes := map[string][]string{
 		"add":     {"desire", "wishman_name", "wishman_qq"},
-		"light":   {"id"},
+		"light":   {"desire_id", "light_name"},
 		"achieve": {"id"},
 		"byid":    {"id"},
 		"cancel":  {"id", "message"},

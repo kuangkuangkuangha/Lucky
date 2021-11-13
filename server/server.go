@@ -1,13 +1,15 @@
 package server
 
 import (
-	"github.com/gin-contrib/sessions"
-	"github.com/gin-contrib/sessions/cookie"
-	"github.com/gin-gonic/gin"
 	"io"
+	"lucky/app/middleware"
 	"lucky/config"
 	"lucky/routes"
 	"os"
+
+	"github.com/gin-contrib/sessions"
+	"github.com/gin-contrib/sessions/cookie"
+	"github.com/gin-gonic/gin"
 )
 
 func Run(httpServer *gin.Engine) {
@@ -33,7 +35,7 @@ func Run(httpServer *gin.Engine) {
 	// 设置日志格式
 	httpServer.Use(gin.LoggerWithFormatter(config.GetLogFormat))
 	httpServer.Use(gin.Recovery())
-
+	httpServer.Use(middleware.CORSMiddleware())
 	// 注册路由
 	routes.Routes(httpServer)
 

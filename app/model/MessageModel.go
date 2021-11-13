@@ -19,7 +19,6 @@ func (model *Message) LeaveMessage(data Message) helper.ReturnType {
 	}
 }
 
-// TODO:
 func (model *Message) GetMessageByID(id int) helper.ReturnType {
 	message := Message{}
 	err := db.

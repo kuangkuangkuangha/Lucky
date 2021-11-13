@@ -2,6 +2,7 @@ package model
 
 import (
 	"fmt"
+	"log"
 	"lucky/app/common"
 	"lucky/app/helper"
 
@@ -53,7 +54,7 @@ func (model *User) CreateUser(user User) helper.ReturnType {
 	if err != nil {
 		return helper.ReturnType{Status: common.CodeError, Msg: "创建用户失败", Data: err.Error()}
 	}
-	return helper.ReturnType{Status: common.CodeSuccess, Msg: "创建用户成功", Data: nil}
+	return helper.ReturnType{Status: common.CodeSuccess, Msg: "创建用户成功", Data: user}
 }
 
 func (model *User) GetUserByRealName(realName string) helper.ReturnType {
@@ -88,13 +89,18 @@ func (model *User) UpdateUserInfo(user User) helper.ReturnType {
 func (model *User) CcnuLogin(data User) helper.ReturnType {
 	user := User{}
 
+	info, err := GetUserInfoFormOne(data.IdcardNumber, data.Password)
+	if err != nil {
+		return helper.ReturnRes(common.CodeError, "登录失败", nil)
+	}
+
 	// res如果是个err，说明是第一次登入
 	// res如果是和user结构，说明lucky数据库中存在用户，返回直接登入
 	if res := db.Where("student_number = ?", data.IdcardNumber).First(&user); res.Error != nil {
-		info, err2 := GetUserInfoFormOne(data.IdcardNumber, data.Password)
-		if err2 != nil {
-			return helper.ReturnRes(common.CodeError, "用户名或密码错误", res)
-		}
+		// _, _ := GetUserInfoFormOne(data.IdcardNumber, data.Password)
+		// if err2 != nil {
+		// 	return helper.ReturnRes(common.CodeError, "用户名或密码错误", res)
+		// }
 
 		xb, err3 := strconv.Atoi(info.User.Xb)
 		if err3 != nil {
@@ -110,8 +116,6 @@ func (model *User) CcnuLogin(data User) helper.ReturnType {
 		if err := db.Model(&User{}).Create(&data).Error; err != nil {
 			return helper.ReturnRes(common.CodeError, "添加用户失败", err)
 		}
-	} else {
-		return helper.ReturnRes(common.CodeError, "你已经登录过啦!", res)
 	}
 
 	return helper.ReturnRes(common.CodeSuccess, "登陆成功", nil)
@@ -135,8 +139,9 @@ func (model *User) GetUserByStudentNumber(student_number string) helper.ReturnTy
 // 根据用户id 获取邮箱
 func (model *User) GetUserEmailByUserID(UserID int) string {
 	var user User
-	err := db.Model(&User{}).Where("id = ?", UserID).Find(&user).Error
+	err := db.Model(&User{}).Where("id = ?", UserID).First(&user).Error
 	if err != nil {
+		log.Println(err.Error())
 		return ""
 	}
 	return user.Email

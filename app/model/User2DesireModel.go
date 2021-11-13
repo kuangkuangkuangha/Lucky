@@ -1,10 +1,9 @@
 package model
 
 import (
+	"log"
 	"lucky/app/common"
 	"lucky/app/helper"
-
-	"github.com/gin-gonic/gin"
 )
 
 type UserDesire struct {
@@ -63,9 +62,7 @@ func (model *UserDesire) GetUserAllDesire(data UserDesire) helper.ReturnType {
 	// // 合并
 	// Desires = append(Desires, post_desire...)
 
-	return helper.ReturnType{Status: common.CodeSuccess, Msg: "获取用户愿望成功", Data: gin.H{
-		"wishes": Desires,
-	}}
+	return helper.ReturnType{Status: common.CodeSuccess, Msg: "获取用户愿望成功", Data: Desires}
 
 }
 
@@ -126,8 +123,10 @@ func (model *UserDesire) CheckUserDesire2(data UserDesire) int {
 // 获取用户id
 func (model *UserDesire) GetUserIDbyWishID(data int) int {
 	var userDesire UserDesire
-	err := db.Model(&UserDesire{}).Where("desire_id = ?", data).Find(&userDesire).Error
+	log.Println(data)
+	err := db.Model(&UserDesire{}).Where("desire_id = ?", data).First(&userDesire).Error
 	if err != nil {
+		log.Println(err.Error())
 		return -1
 	}
 	return userDesire.UserID

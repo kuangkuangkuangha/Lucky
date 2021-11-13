@@ -10,16 +10,16 @@ import (
 type Desire struct {
 	ID            int       `json:"wish_id" gorm:"id" uri:"wish_id" form:"wish_id"`
 	Desire        string    `json:"wish" gorm:"desire"`
-	LightAt       time.Time `json:"light_at" gorm:"light_at"`
+	LightAt       time.Time `json:"light_at,omitempty" gorm:"light_at"`
 	CreatAt       time.Time `json:"creat_at" gorm:"creat_at"`
-	WishmanName   string    `json:"wishman_name" gorm:"wishman_name"`
-	WishmanQQ     string    `json:"wishman_qq" gorm:"wishman_qq"`
-	WishmanWechat string    `json:"wishman_wechat" gorm:"wishman_wechat"`
-	WishmanTel    string    `json:"wishman_tel" gorm:"wishman_tel"`
-	LightUser     int       `json:"light_user" gorm:"light_user"`
+	WishmanName   string    `json:"wishman_name,omitempty" gorm:"wishman_name"`
+	WishmanQQ     string    `json:"wishman_qq,omitempty" gorm:"wishman_qq"`
+	WishmanWechat string    `json:"wishman_wechat,omitempty" gorm:"wishman_wechat"`
+	WishmanTel    string    `json:"wishman_tel,omitempty" gorm:"wishman_tel"`
+	LightUser     int       `json:"light_user,omitempty" gorm:"light_user"`
 	State         int       `json:"state" gorm:"state"`
 	Type          int       `json:"type" gorm:"type" form:"categories"`
-	School        int       `json:"school"`
+	School        int       `json:"school" gorm:"school"`
 }
 
 // school 说明
@@ -36,8 +36,8 @@ func (Desire) TableName() string {
 }
 
 func (model *Desire) AddDesire(data Desire) helper.ReturnType {
-
-	err := db.Model(&Desire{}).Omit("creat_at", "light_at").Create(&data).Error // 没有.Error会报错
+	log.Println(data.CreatAt)
+	err := db.Model(&Desire{}).Omit("light_at").Create(&data).Error // 没有.Error会报错
 
 	if err != nil {
 		log.Print("43", err)
@@ -58,9 +58,9 @@ func (model *Desire) LightDesire(data Desire) helper.ReturnType {
 		return helper.ReturnType{Status: common.CodeError, Msg: "点亮愿望失败", Data: err}
 	}
 
-	if desire.State == 0 {
+	if desire.State == common.WishNotLight {
 		desire.State = data.State
-		desire.LightAt = time.Now()
+		desire.LightAt = time.Now().In(common.ChinaTime)
 		desire.LightUser = data.LightUser
 		err := db.Model(&Desire{}).Update(&desire).Error
 		if err != nil {
@@ -94,7 +94,7 @@ func (model *Desire) AchieveDesire(data Desire) helper.ReturnType {
 		return helper.ReturnType{Status: common.CodeError, Msg: "实现愿望失败", Data: err.Error()}
 	}
 
-	if desire.State == 1 {
+	if desire.State == common.WishHaveLight {
 		desire.State = 2
 		//desire.LightAt = time.Now()
 		desire.LightUser = data.LightUser
@@ -118,8 +118,8 @@ func (model *UserDesire) AchieveDesire(data Desire) helper.ReturnType {
 		return helper.ReturnType{Status: common.CodeError, Msg: "实现愿望失败", Data: err.Error()}
 	}
 
-	if desire.State == 1 {
-		desire.State = 2
+	if desire.State == common.WishHaveLight {
+		desire.State = common.WishHaveRealize
 		//desire.LightAt = time.Now()
 		desire.LightUser = data.LightUser
 		err := db.Model(&Desire{}).Update(&desire).Error
@@ -152,7 +152,7 @@ func (model *Desire) GetWishByCategories(data Desire) helper.ReturnType {
 
 	var desire []*Desire
 
-	err := db.Model(&Desire{}).Where("type = ? AND state = ?", data.Type, 0).Find(&desire).Error
+	err := db.Select([]string{"id", "desire", "wishman_name", "creat_at", "light_at", "state", "school"}).Where("type = ? AND state = ?", data.Type, common.WishNotLight).Find(&desire).Error
 
 	if err != nil {
 		return helper.ReturnType{Status: common.CodeError, Msg: "查看愿望失败", Data: err.Error()}
@@ -165,7 +165,7 @@ func (model *Desire) GetWishByCategories(data Desire) helper.ReturnType {
 // 删除愿望
 func (model *Desire) DeleteWish(data Desire) helper.ReturnType {
 
-	err := db.Delete(&Desire{}, data.ID).Error
+	err := db.Model(&Desire{}).Select("state").Where("id = ?", data.ID).Update("state", common.WishHaveDelete).Error
 
 	if err != nil {
 		return helper.ReturnType{Status: common.CodeError, Msg: "删除愿望失败", Data: err.Error()}
@@ -175,34 +175,11 @@ func (model *Desire) DeleteWish(data Desire) helper.ReturnType {
 
 }
 
-// 一次性返回10个愿望
-func (model *Desire) Get10Wishes() helper.ReturnType {
-	var res []*Desire
-
-	err := db.Model(&Desire{}).Limit(10).Find(&res).Error
-	if err != nil {
-		return helper.ReturnType{Status: common.CodeError, Msg: "查询愿望失败", Data: err.Error()}
-	}
-
-	return helper.ReturnType{Status: common.CodeSuccess, Msg: "查询愿望成功", Data: res}
-}
-
-// 获取所有愿望
-func (model *Desire) GetAllWishes() helper.ReturnType {
-	var res []Desire
-	err := db.Model(&Desire{}).Where("state = ?", 0).Find(&res).Error
-	if err != nil {
-		return helper.ReturnType{Status: common.CodeError, Msg: "查询愿望失败", Data: err.Error()}
-	}
-
-	return helper.ReturnType{Status: common.CodeSuccess, Msg: "查询愿望成功", Data: res}
-}
-
 // 取消实现愿望
 func (model *Desire) CancelAchieveDesire(data Desire) helper.ReturnType {
 	err := db.
 		Model(&Desire{}).Where("id = ?", data.ID).
-		Updates(map[string]interface{}{"light_user": -1, "state": 0}).
+		Updates(map[string]interface{}{"light_user": -1, "state": common.WishNotLight}).
 		Error
 	if err != nil {
 		return helper.ReturnType{Status: common.CodeError, Msg: "取消点亮愿望失败", Data: err.Error()}

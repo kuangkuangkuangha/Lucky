@@ -23,6 +23,11 @@ stages:
     pool:
       vmImage: ubuntu-latest
     steps:
+    - script: sed -i 's/db_server=[a-z0-9\"]*/db_server="172.17.0.1"/' $(Build.SourcesDirectory)/Dockerfile
+    - script: sed -i 's/db_port=[a-z0-9\"]*/db_port="3306"/' $(Build.SourcesDirectory)/Dockerfile
+    - script: sed -i 's/db_name=[a-z0-9\"]*/db_name="$(DBNAME)"/' $(Build.SourcesDirectory)/Dockerfile
+    - script: sed -i 's/db_username=[a-z0-9\"]*/db_username="$(DBUSER)"/' $(Build.SourcesDirectory)/Dockerfile
+    - script: sed -i 's/db_password=[a-z0-9\"]*/db_password="$(DBPSWD)"/' $(Build.SourcesDirectory)/Dockerfile
     - task: Docker@2
       displayName: Build and Push
       inputs:
@@ -48,5 +53,5 @@ stages:
           steps:
           - script: if [[ -n $(docker ps -a | grep $(CONTAINERNAME)) ]]; then docker stop $(CONTAINERNAME) && docker rm $(CONTAINERNAME); fi
           - script: docker pull $(IMAGENAME):$(TAG)
-          - script: docker run -itd -p $(PORT):80 --name $(CONTAINERNAME) $(IMAGENAME):$(TAG)
+          - script: docker run -itd -p $(PORT):5000 --name $(CONTAINERNAME) $(IMAGENAME):$(TAG)
 

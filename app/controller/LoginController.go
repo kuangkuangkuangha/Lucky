@@ -7,7 +7,6 @@ import (
 	"lucky/app/helper"
 	"lucky/app/model"
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -44,9 +43,9 @@ func Callback(c *gin.Context) {
 	userJson.IdcardNumber = whutUserInfo.UserInfo.Sno
 	userJson.Name = whutUserInfo.UserInfo.Name
 	if whutUserInfo.UserInfo.Sexname == "男" {
-		userJson.Gender = 0
-	} else {
 		userJson.Gender = 1
+	} else {
+		userJson.Gender = 0
 	}
 	if whutUserInfo.UserInfo.Deptcodename != "" {
 		userJson.Major = whutUserInfo.UserInfo.Deptcodename
@@ -57,17 +56,17 @@ func Callback(c *gin.Context) {
 	// 首次登陆，新建用户
 	if res.Status == common.CodeError {
 		res = userModel.CreateUser(userJson)
-		token := helper.CreatToken(strconv.Itoa(res.Data.(model.User).ID))
-		c.SetCookie("jwt_token", token, 604800, "/", "localhost", false, false)
+		token := helper.CreatToken(res.Data.(model.User).IdcardNumber)
+		c.SetCookie("jwt_token", token, 604800, "/", common.RedirectURL, false, false)
 		c.Request.Header.Add("jwt_token", token)
 		if whutUserInfo.Continueurl != "" {
 			c.Redirect(http.StatusPermanentRedirect, whutUserInfo.Continueurl)
 		} else {
 			// 根据性别进行重定向
 			if userJson.Gender == 0 {
-				c.Redirect(http.StatusPermanentRedirect, "https://ipandai.club")
+				c.Redirect(http.StatusPermanentRedirect, common.RedirectURL)
 			} else {
-				c.Redirect(http.StatusPermanentRedirect, "https://ipandai.club")
+				c.Redirect(http.StatusPermanentRedirect, common.RedirectURL)
 			}
 		}
 		return
@@ -75,21 +74,18 @@ func Callback(c *gin.Context) {
 
 	// set http only as false
 	// expire at 7 days before
-	token := helper.CreatToken(strconv.Itoa(res.Data.(model.User).ID))
-	c.SetCookie("jwt_token", token, 604800, "/", "localhost", false, false)
+	token := helper.CreatToken(res.Data.(model.User).IdcardNumber)
+	c.SetCookie("jwt_token", token, 604800, "/", common.RedirectURL, false, false)
 	c.Request.Header.Add("jwt_token", token)
 	if whutUserInfo.Continueurl != "" {
 		c.Redirect(http.StatusMovedPermanently, whutUserInfo.Continueurl)
 		return
 	}
-	// TODO: 最后进行redirect
-	//if(empty($_POST['continueurl'])) $this->redirect($data['gender'] == 0? 'https://lucky-day.itoken.team/act/login/boy_lead_page.html': 'https://lucky-day.itoken.team/act/login/girl_lead_page.html');
-	//else $this->redirect($_POST['continueurl']);
-
 }
 
+// 这个接口 应该是没啥用了
 func WhutLogin(c *gin.Context) {
-	c.Redirect(http.StatusPermanentRedirect, "http://ias.sso.itoken.team/portal.php?posturl=https%3A%2F%2Fipandai.club%2Fapi%2Flogin%2Fwhut%2Fcallback&continueurl=https://ipandai.club")
+	c.Redirect(http.StatusMovedPermanently, "https://ias.sso.itoken.team/portal.php?posturl=https%3A%2F%2Fipandai.club%2Fapi%2Flogin%2Fwhut%2Fcallback&continueurl=https://ipandai.club")
 }
 
 // 强制用户绑定邮箱
@@ -123,6 +119,19 @@ func BindEmail(c *gin.Context) {
 
 }
 
+// 查询用户是否绑定邮箱
+func CheckUserEmail(c *gin.Context) {
+	userModel := model.User{}
+
+	UserID := c.MustGet("user_id").(int)
+	UserEmail := userModel.GetUserEmailByUserID(UserID)
+	if UserEmail == "" {
+		c.JSON(http.StatusOK, helper.ApiReturn(common.CodeError, "未绑定邮箱", ""))
+		return
+	}
+	c.JSON(http.StatusOK, helper.ApiReturn(common.CodeSuccess, "已绑定邮箱", ""))
+}
+
 // ccnulogin
 func CcnuLogin(c *gin.Context) {
 	var userJson model.User
@@ -144,6 +153,7 @@ func CcnuLogin(c *gin.Context) {
 
 	// 首次登陆，验证一站式
 	// 首次登陆
+
 	if res := userModel.CcnuLogin(userJson); res.Status == common.CodeSuccess {
 		// 生成token
 		token := helper.CreatToken(userJson.IdcardNumber)

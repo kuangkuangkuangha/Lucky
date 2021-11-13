@@ -2,9 +2,10 @@ package db_server
 
 import (
 	"fmt"
+	"lucky/config"
+
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jinzhu/gorm"
-	"lucky/config"
 )
 
 var MySqlDb *gorm.DB
@@ -14,7 +15,7 @@ func init() {
 	dbConfig := config.GetDbConfig()
 
 	// set db dsn
-	dbDSN := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=%s&parseTime=%s",
+	dbDSN := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=%s&parseTime=%s&loc=%s",
 		dbConfig["username"],
 		dbConfig["password"],
 		dbConfig["hostname"],
@@ -22,6 +23,7 @@ func init() {
 		dbConfig["database"],
 		dbConfig["charset"],
 		dbConfig["parseTime"],
+		dbConfig["timezone"],
 	)
 
 	// open connection

@@ -17,7 +17,7 @@ import (
 // 取消点亮 1
 //
 func getHtmlContent(MsgType int, WishContent string, MessageContent string) string {
-	SendTime := fmt.Sprintf("%02d-%02d-%02d %02d:%02d:%02d", time.Now().Year(), time.Now().Month(), time.Now().Day(), time.Now().Hour(), time.Now().Minute(), time.Now().Second())
+	SendTime := fmt.Sprintf("%02d-%02d-%02d %02d:%02d:%02d", time.Now().In(common.ChinaTime).Year(), time.Now().In(common.ChinaTime).Month(), time.Now().In(common.ChinaTime).Day(), time.Now().In(common.ChinaTime).Hour(), time.Now().In(common.ChinaTime).Minute(), time.Now().In(common.ChinaTime).Second())
 	html := ""
 	switch MsgType {
 	case common.LightWish:
